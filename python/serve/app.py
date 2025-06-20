@@ -20,10 +20,14 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict
+import time
 
 from fastapi import FastAPI
+from fastapi.responses import Response
 from pydantic import BaseModel
 from ray import serve
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from serve.metrics import REQUEST_COUNT, REQUEST_LATENCY
 
 ###############################################################################
 # FastAPI schema
@@ -68,12 +72,22 @@ class ModelServer:  # pylint: disable=too-few-public-methods
         """Health-check used by Docker/K8s readiness probe."""
         return {"status": "ok", "model_uri": self.model_uri}
 
+    @app.get("/metrics")
+    def prometheus_metrics() -> Response:  # noqa: D401
+        """Prometheus scrape endpoint."""
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
     @app.post("/predict", response_model=PredictResponse)
     def predict(self, payload: PredictRequest) -> PredictResponse:  # noqa: D401
-        """Return dummy probability until model integration."""
-        # Dummy logic: pick pseudo-random but deterministic number.
+        """Return dummy probability until model integration and record metrics."""
+        start = time.perf_counter()
+        # Dummy logic: pseudo-random deterministic.
         prob = (hash(payload.game_id) % 100) / 100.0
-        return PredictResponse(game_id=payload.game_id, win_prob=prob)
+        resp = PredictResponse(game_id=payload.game_id, win_prob=prob)
+        latency = time.perf_counter() - start
+        REQUEST_LATENCY.observe(latency)
+        REQUEST_COUNT.labels("POST", "200").inc()
+        return resp
 
 
 ###############################################################################

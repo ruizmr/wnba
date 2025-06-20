@@ -34,6 +34,31 @@ Response body schema:
 }
 ```
 
+## Observability
+
+Prometheus metrics are exposed at:
+
+```
+GET /metrics
+```
+
+The scrape includes:
+
+* `predict_requests_total{method="POST", http_status="200"}` – counter
+* `predict_latency_seconds` – histogram buckets 10 ms → 5 s
+
+Example scrape:
+
+```text
+# HELP predict_requests_total Number of /predict requests processed
+# TYPE predict_requests_total counter
+predict_requests_total{method="POST",http_status="200"} 42
+# HELP predict_latency_seconds Latency of /predict endpoint in seconds
+# TYPE predict_latency_seconds histogram
+predict_latency_seconds_bucket{le="0.1"} 40
+...
+```
+
 ## Usage Examples
 
 ```bash
