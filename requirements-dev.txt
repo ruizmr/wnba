@@ -4,3 +4,5 @@ typer
 rich
 jinja2
 pre-commit
+requests
+pydantic

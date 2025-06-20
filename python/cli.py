@@ -19,28 +19,46 @@ from rich.table import Table
 from .aggregate import geo_mean
 from .lenses import kelly_criterion
 
+# Third-party
+import requests
+
 app = typer.Typer(help="Edge Engine CLI")
 console = Console()
 
-PREDICT_URL_ENV = "PREDICT_URL"
+PREDICT_URL_ENV = "PREDICT_URL"  # provided by DevOps Serve deployment
 
 
 def _mock_prediction() -> Dict[str, Any]:
     """Return a hard-coded mocked prediction used in `--test` mode."""
     return {
-        "prob": 0.55,  # win probability
-        "odds": 2.2,  # decimal odds
+        "win_prob": 0.55,
     }
 
 
 def _fetch_prediction(game_id: str, predict_url: str) -> Dict[str, Any]:
-    """Placeholder HTTP request to Serve endpoint (to be wired by Agent 2)."""
-    raise NotImplementedError("Live endpoint not yet wired—use --test mode for now.")
+    """Call the Ray Serve `/predict` endpoint and return the JSON response.
+
+    Parameters
+    ----------
+    game_id
+        Integer identifier for the basketball game.
+    predict_url
+        Base URL of the Serve deployment, e.g. `http://127.0.0.1:8000`.
+    """
+    url = predict_url.rstrip("/") + "/predict"
+    resp = requests.post(url, json={"game_id": int(game_id), "features": {}})
+    resp.raise_for_status()
+    return resp.json()
 
 
 @app.command("game")
 def predict_game(
     game_id: str = typer.Argument(..., help="ID of the game to predict"),
+    odds: float = typer.Option(
+        2.0,
+        "--odds",
+        help="Market decimal odds for the outcome (default: 2.0).",
+    ),
     test: bool = typer.Option(False, "--test", help="Use mocked Serve response"),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Skip writing ledger entries (no side-effects)"
@@ -59,17 +77,17 @@ def predict_game(
             raise typer.Exit(code=1)
         data = _fetch_prediction(game_id, predict_url)
 
-    stake = kelly_criterion(prob=data["prob"], odds=data["odds"])  # simple lens chain
+    stake = kelly_criterion(prob=data["win_prob"], odds=odds)  # simple lens chain
 
     table = Table(title="Prediction", box=None)
     table.add_column("Game ID", style="cyan")
-    table.add_column("Prob", justify="right")
+    table.add_column("Win Prob", justify="right")
     table.add_column("Odds", justify="right")
     table.add_column("Stake", justify="right", style="green")
     table.add_row(
         game_id,
-        f"{data['prob']:.2%}",
-        f"{data['odds']}",
+        f"{data['win_prob']:.2%}",
+        f"{odds}",
         f"{stake:.2%}",
     )
     console.print(table)
@@ -84,6 +102,7 @@ def predict_slate(
     slate_path: Path = typer.Argument(
         ..., exists=True, help="JSON file containing a list of game IDs"
     ),
+    odds: float = typer.Option(2.0, "--odds", help="Market decimal odds for all games."),
     test: bool = typer.Option(False, "--test", help="Use mocked Serve responses"),
 ):
     """Predict a slate (list) of games passed in via JSON filepath."""
@@ -100,7 +119,7 @@ def predict_slate(
         else:
             predict_url = os.getenv(PREDICT_URL_ENV)
             data = _fetch_prediction(gid, predict_url)
-        stake = kelly_criterion(prob=data["prob"], odds=data["odds"])
+        stake = kelly_criterion(prob=data["win_prob"], odds=odds)
         stakes.append(stake)
 
     aggregate_stake = geo_mean(stakes)
