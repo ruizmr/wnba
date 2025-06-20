@@ -1,5 +1,11 @@
 import pytest  # type: ignore
 
+# Ensure core deps present; otherwise skip whole module
+try:
+    import ray  # type: ignore
+except ModuleNotFoundError:
+    pytest.skip("ray not installed – skip smoke tests", allow_module_level=True)
+
 import torch  # type: ignore
 
 from python.data.nightly_fetch import _fake_lines, _fake_results
@@ -11,7 +17,6 @@ def test_forward_pass_cpu():
     """Minimal smoke test that runs a forward pass on CPU (no CUDA required)."""
 
     from datetime import date
-    import ray
 
     ray.init(ignore_reinit_error=True, address="local")
     ds_lines = ray.data.from_items(_fake_lines(10, date.today()))

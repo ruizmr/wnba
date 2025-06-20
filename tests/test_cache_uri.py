@@ -2,6 +2,12 @@ from pathlib import Path
 
 import pytest  # type: ignore
 
+# Skip entire module if core deps missing
+try:
+    import torch  # type: ignore
+except ModuleNotFoundError:
+    pytest.skip("torch not installed – skip cache/URI tests", allow_module_level=True)
+
 from python.graph.builder import save_graph, _tiny_fake_datasets, build_graph
 from python.model.train import main as train_main
 

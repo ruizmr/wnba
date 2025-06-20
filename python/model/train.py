@@ -63,7 +63,13 @@ from python.data.nightly_fetch import _fake_lines, _fake_results
 # -----------------------------------------------------------------------------
 
 def _build_dataset() -> Dict[str, torch.Tensor]:  # noqa: D401
-    import ray.data
+    try:
+        import ray.data  # type: ignore
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise ModuleNotFoundError(
+            "ray.data is required to build datasets. Ensure Ray is installed with the 'data' extra (ray[data])."
+        ) from exc
+
     from datetime import date
 
     ray.init(address="auto", ignore_reinit_error=True)

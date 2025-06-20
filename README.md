@@ -60,18 +60,39 @@ For further details see `agents.md`.
 > a compatible toolkit on their machine.
 
 ## Development setup
-Before running any code, set up the Conda environment **and** install the repo
-in *editable* mode so imports resolve in notebooks/IDEs:
+Every contributor should follow **one** of the two patterns below so that local
+`import` statements resolve immediately in editors, notebooks and CLI tools.
 
-```bash
-conda env create -f env.yml   # first-time only
-conda activate edge-engine
+**Step-by-step**
 
-# Keep local edits importable without reinstalling
-pip install -e .
+1. Clone the repo and move into its directory.  
+2. Create the Conda environment (once):
 
-# Alternatively (if you do NOT want a site-packages install)
-# export PYTHONPATH=$(pwd)
-```
+   ```bash
+   conda env create -f env.yml
+   ```
+
+3. Activate the env on every new shell:
+
+   ```bash
+   conda activate edge-engine
+   ```
+
+4. Choose one of:
+
+   • **Editable install** (recommended for day-to-day coding):
+
+   ```bash
+   pip install -e .        # changes take effect instantly
+   ```
+
+   • **PYTHONPATH hack** (quick & dirty, no wheel install):
+
+   ```bash
+   export PYTHONPATH=$(pwd)
+   ```
+
+If your IDE still reports "import not found", double-check that it is using
+the `edge-engine` interpreter.
 
 ```bash
