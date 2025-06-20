@@ -31,6 +31,7 @@ from serve.metrics import REQUEST_COUNT, REQUEST_LATENCY
 from serve.tracing import init_tracing
 from serve.auth import verify_jwt
 from serve.rate_limit import init_rate_limit
+from serve.model_loader import load_mini_hgt
 
 ###############################################################################
 # FastAPI schema
@@ -38,10 +39,25 @@ from serve.rate_limit import init_rate_limit
 
 
 class PredictRequest(BaseModel):
-    """Schema for `/predict` endpoint request."""
+    """Schema for `/predict` endpoint request.
+
+    The architect's v1 API expects `home_team` and `away_team` strings under the
+    ``features`` key. Future versions may extend this schema – we will adapt via
+    pydantic's model upgrade path.
+    """
 
     game_id: int
     features: Dict[str, Any]
+
+    # Convenience accessors -------------------------------------------------
+
+    @property
+    def home_team(self) -> str:  # noqa: D401
+        return self.features.get("home_team", "")
+
+    @property
+    def away_team(self) -> str:  # noqa: D401
+        return self.features.get("away_team", "")
 
 
 class PredictResponse(BaseModel):
@@ -69,8 +85,15 @@ class ModelServer:  # pylint: disable=too-few-public-methods
 
     def __init__(self) -> None:
         self.model_uri: str = os.getenv("MODEL_URI", "models/best.pt")
-        # TODO: Replace with torch.load + model.eval() when Agent 1 lands.
-        print(f"[Serve] Starting with MODEL_URI={self.model_uri}")
+
+        # Load MiniHGT checkpoint – if fails, stay in degraded mode.
+        try:
+            self.model = load_mini_hgt(self.model_uri)
+            self._loaded = True
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Serve] ERROR loading model: {exc}. Falling back to dummy predictions.")
+            self.model = None
+            self._loaded = False
 
     # ---------------- API routes ---------------- #
 
@@ -87,15 +110,72 @@ class ModelServer:  # pylint: disable=too-few-public-methods
     @limiter.limit("60/minute")
     @app.post("/predict", response_model=PredictResponse)
     def predict(self, payload: PredictRequest, user=Depends(verify_jwt)) -> PredictResponse:  # noqa: D401,E501
-        """Return dummy probability; requires valid JWT and subject to rate limit."""
+        """Return model probability; falls back to pseudo-random if model unavailable."""
+
         start = time.perf_counter()
-        # Dummy logic: pseudo-random deterministic.
-        prob = (hash(payload.game_id) % 100) / 100.0
-        resp = PredictResponse(game_id=payload.game_id, win_prob=prob)
+
+        if self._loaded:
+            prob = self._infer_single_game(payload)
+        else:
+            # Fallback deterministic hash – should rarely trigger in production.
+            prob = (hash(payload.game_id) % 100) / 100.0
+
+        resp = PredictResponse(game_id=payload.game_id, win_prob=float(prob))
         latency = time.perf_counter() - start
         REQUEST_LATENCY.observe(latency)
         REQUEST_COUNT.labels("POST", "200").inc()
         return resp
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _infer_single_game(self, payload: PredictRequest) -> float:  # noqa: D401
+        """Minimal on-the-fly graph build for a single game and run inference."""
+
+        try:
+            import ray  # type: ignore
+            from python.graph.builder import build_graph  # dynamic import
+            import torch  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise RuntimeError("Required libs for inference missing: install ray & torch-geometric") from exc
+
+        # Build tiny Ray datasets
+        if not ray.is_initialized():
+            ray.init(ignore_reinit_error=True, address="auto")
+
+        ds_lines = ray.data.from_items(
+            [
+                {
+                    "game_id": payload.game_id,
+                    "team": payload.home_team,
+                    "line_type": "spread",
+                    "value": -3.5,
+                    "odds": -110,
+                },
+                {
+                    "game_id": payload.game_id,
+                    "team": payload.away_team,
+                    "line_type": "spread",
+                    "value": 3.5,
+                    "odds": -110,
+                },
+            ]
+        )
+
+        ds_results = ray.data.from_items([])  # empty – results unknown pre‐game
+
+        g = build_graph(ds_lines, ds_results)
+
+        # Ensure features tensors are torch
+        import torch  # type: ignore
+
+        x_dict = {k: torch.tensor(v, dtype=torch.float32) for k, v in g.x_dict.items()}
+        edge_index_dict = {k: torch.tensor(v, dtype=torch.long) for k, v in g.edge_index_dict.items()}
+
+        logits = self.model(x_dict, edge_index_dict)
+        prob = torch.softmax(logits, dim=-1)[0, 1].item()  # probability of class 1 (win)
+        return prob
 
 
 ###############################################################################
