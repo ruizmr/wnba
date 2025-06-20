@@ -29,7 +29,8 @@ RUN pip install --prefix=/venv .
 # ─── Runtime stage ─── #
 #########################
 FROM python:3.10-slim AS runtime
-LABEL org.opencontainers.image.source="https://github.com/<org>/<repo>"
+ARG REPO_URL="https://github.com/your-org/edge-serve"
+LABEL org.opencontainers.image.source=$REPO_URL
 ENV PATH="/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
@@ -44,4 +45,4 @@ COPY --from=builder /venv /venv
 COPY --from=builder /src /app
 
 EXPOSE 8000
-ENTRYPOINT ["python", "-m", "wnba.serve.app"]
+ENTRYPOINT ["python", "-m", "python.serve.app"]

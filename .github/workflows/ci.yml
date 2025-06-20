@@ -38,6 +38,7 @@ jobs:
           tags: ${{ env.IMAGE }}
           build-args: |
             VARIANT=${{ matrix.variant }}
+            REPO_URL=https://github.com/${{ github.repository }}
           load: true
 
       - name: Run pytest + coverage inside container
