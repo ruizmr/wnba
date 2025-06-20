@@ -30,7 +30,8 @@ try:
     from ray.data import Dataset
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise ModuleNotFoundError(
-        "Ray is required to run nightly_fetch. Install via `pip install ray[default]` or ensure it's in env.yml."
+        "Ray (with the 'data' extra) is required to run nightly_fetch. Install via `pip install ray[data]` "
+        "or ensure `ray[default,air,data]` is present in env.yml."
     ) from exc
 
 from python.data.schema import LineRow, ResultRow

@@ -21,13 +21,16 @@ try:
     from torch_geometric.data import HeteroData  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise ModuleNotFoundError(
-        "torch-geometric is required for graph building. Add it to env.yml or install manually."
+        "torch-geometric is required for graph building. Install via `pip install torch-geometric` "
+        "or ensure the wheels listed in env.yml are present."
     ) from exc
 
 try:
-    import numpy as np
+    import numpy as np  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover
-    raise ModuleNotFoundError("numpy is required. Please install numpy.") from exc
+    raise ModuleNotFoundError(
+        "NumPy is required for graph building. Install with `pip install numpy` or via Conda."
+    ) from exc
 
 # -----------------------------------------------------------------------------
 # Public API
@@ -147,6 +150,12 @@ def save_graph(graph: "HeteroData", output_path: str | Path) -> None:  # noqa: D
     import torch
 
     try:
+        if not isinstance(graph, HeteroData):
+            raise TypeError(
+                "save_graph expects a `torch_geometric.data.HeteroData` instance; "
+                f"received {type(graph)}."
+            )
+
         out_path = Path(output_path)
         if out_path.suffix != ".pt":
             raise ValueError(

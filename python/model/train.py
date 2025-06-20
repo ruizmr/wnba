@@ -45,12 +45,16 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     ) from exc
 
 try:
-    import ray
-    from ray import tune
-    from ray.train import Checkpoint
-    from ray.train.torch import TorchTrainer
+    import ray  # type: ignore
+    from ray import tune  # type: ignore
+    from ray.train import Checkpoint  # type: ignore
+    from ray.train.torch import TorchTrainer  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover
-    raise ModuleNotFoundError("Ray with Train & Tune extras is required. Install ray[air].") from exc
+    missing = exc.name or "ray"
+    raise ModuleNotFoundError(
+        f"{missing} (with 'air','train','data' extras) is required for training. Install via `pip install ray[air,train,data]` "
+        "or activate the Conda env defined in env.yml."
+    ) from exc
 
 from torch.utils.data import DataLoader
 

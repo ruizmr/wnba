@@ -12,13 +12,15 @@ from __future__ import annotations
 from typing import Dict
 
 try:
-    import torch
-    from torch import nn
+    import torch  # type: ignore
+    from torch import nn  # type: ignore
     from torch_geometric.nn import HGTConv  # type: ignore
     from torch_geometric.data import HeteroData  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover
+    missing = exc.name
     raise ModuleNotFoundError(
-        "PyTorch + torch-geometric are required for the model. Add them to env.yml."
+        f"{missing} is required for the MiniHGT model. Install via `pip install {missing}` or activate the Conda env "
+        "defined in env.yml."
     ) from exc
 
 # -----------------------------------------------------------------------------
