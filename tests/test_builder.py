@@ -1,4 +1,5 @@
 import pytest  # type: ignore
+pytest.importorskip("torch_geometric")
 
 from python.graph.builder import _tiny_fake_datasets, build_graph
 
