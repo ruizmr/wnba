@@ -30,6 +30,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from serve.metrics import REQUEST_COUNT, REQUEST_LATENCY
 from serve.tracing import init_tracing
 from serve.auth import verify_jwt
+from serve.rate_limit import init_rate_limit
 
 ###############################################################################
 # FastAPI schema
@@ -56,8 +57,9 @@ class PredictResponse(BaseModel):
 
 app = FastAPI()
 
-# Initialize OpenTelemetry tracing (no-op if already configured)
+# Initialize shared middlewares
 init_tracing(app)
+limiter = init_rate_limit(app)
 
 
 @serve.deployment(name="edge-model", num_replicas=1, route_prefix="/")
@@ -82,9 +84,10 @@ class ModelServer:  # pylint: disable=too-few-public-methods
         """Prometheus scrape endpoint."""
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    @limiter.limit("60/minute")
     @app.post("/predict", response_model=PredictResponse)
     def predict(self, payload: PredictRequest, user=Depends(verify_jwt)) -> PredictResponse:  # noqa: D401,E501
-        """Return dummy probability; requires valid JWT."""
+        """Return dummy probability; requires valid JWT and subject to rate limit."""
         start = time.perf_counter()
         # Dummy logic: pseudo-random deterministic.
         prob = (hash(payload.game_id) % 100) / 100.0

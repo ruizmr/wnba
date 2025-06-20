@@ -119,3 +119,11 @@ print(jwt.encode(payload, os.environ["JWT_SECRET"], algorithm="HS256"))
 ```
 
 `/healthz` and `/metrics` remain public for liveness & scraping.
+
+### Rate limiting
+
+All `/predict` calls are limited to `60/minute` per IP by default.
+
+Override via env var `RATE_LIMIT_TIER` in Serve deployment (planned) or edit
+`serve/app.py` decorator.  In production, set `REDIS_URL` so limits are shared
+across replicas.
