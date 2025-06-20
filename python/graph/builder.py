@@ -146,9 +146,12 @@ def save_graph(graph: "HeteroData", output_path: str | Path) -> None:  # noqa: D
 
     import torch
 
-    out_path = Path(output_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(graph, out_path)
+    try:
+        out_path = Path(output_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(graph, out_path)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"Failed to save graph to {output_path}: {exc}") from exc
 
 
 def _cli() -> None:  # noqa: D401
@@ -183,9 +186,13 @@ def _cli() -> None:  # noqa: D401
     ds_lines = ray.data.read_parquet(str(args.lines))
     ds_results = ray.data.read_parquet(str(args.results))
 
-    graph = build_graph(ds_lines, ds_results)
-    save_graph(graph, args.out)
-    print(f"✅ Cached graph to {args.out.resolve()}")
+    try:
+        graph = build_graph(ds_lines, ds_results)
+        save_graph(graph, args.out)
+        print(f"✅ Cached graph to {args.out.resolve()}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"❌ Failed to cache graph: {exc}")
+        raise
 
 
 if __name__ == "__main__":  # pragma: no cover

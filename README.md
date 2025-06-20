@@ -52,3 +52,11 @@ Environment variables:
 
 ---
 For further details see `agents.md`.
+
+> **Note**
+> `env.yml` already includes **PyArrow**, which Ray Data needs for Parquet I/O.
+> GPU users can leave the bundled CUDA-11.8 packages in place, while CPU-only
+> developers may comment-out the three CUDA-labelled lines if Conda cannot find
+> a compatible toolkit on their machine.
+
+```bash

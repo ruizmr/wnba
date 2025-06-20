@@ -126,26 +126,29 @@ def main() -> None:  # noqa: D401
     best_result = results.get_best_result("loss", "min")
     best_checkpoint = best_result.checkpoint
 
-    out_dir = Path("models")
-    out_dir.mkdir(exist_ok=True)
-    file_path = out_dir / "best.pt"
-    torch.save(best_checkpoint.to_dict()["model_state_dict"], file_path)
+    try:
+        out_dir = Path("models")
+        out_dir.mkdir(exist_ok=True)
+        file_path = out_dir / "best.pt"
+        torch.save(best_checkpoint.to_dict()["model_state_dict"], file_path)
 
-    # ------------------------------------------------------------------
-    # Publish model URI for downstream agents (Serve + CLI).
-    # ------------------------------------------------------------------
-    import os  # local import to keep top-level lean
+        # ------------------------------------------------------------------
+        # Publish model URI for downstream agents (Serve + CLI).
+        # ------------------------------------------------------------------
+        import os  # local import to keep top-level lean
 
-    prefix = os.getenv("MODEL_URI_PREFIX", "file://")  # Agent 2 may set to runpod://…
-    model_uri = prefix.rstrip("/") + "/" + str(file_path.resolve())
+        prefix = os.getenv("MODEL_URI_PREFIX", "file://")  # Agent 2 may set to runpod://…
+        model_uri = prefix.rstrip("/") + "/" + str(file_path.resolve())
 
-    # Persist for other jobs & print for logs.
-    uri_file = out_dir / "latest_uri.txt"
-    with open(uri_file, "w", encoding="utf-8") as fh:
-        fh.write(model_uri)
+        # Persist for other jobs & print for logs.
+        uri_file = out_dir / "latest_uri.txt"
+        with open(uri_file, "w", encoding="utf-8") as fh:
+            fh.write(model_uri)
 
-    print(f"🏆 Saved best model → {file_path.resolve()}")
-    print(f"🔗 Published model URI  → {model_uri}")
+        print(f"🏆 Saved best model → {file_path.resolve()}")
+        print(f"🔗 Published model URI  → {model_uri}")
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"Failed to save/publish model checkpoint: {exc}") from exc
 
 
 if __name__ == "__main__":
