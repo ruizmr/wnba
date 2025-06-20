@@ -1,0 +1,61 @@
+# Edge Model Serve Endpoint
+
+The service is deployed via Ray Serve and exposes a RESTful interface powered by FastAPI.
+
+## Base URL
+
+```
+GET /healthz
+```
+Returns `200` with JSON `{ "status": "ok", "model_uri": "..." }` when the service is healthy.
+
+```
+POST /predict
+Content-Type: application/json
+```
+Request body schema:
+
+```jsonc
+{
+  "game_id": 12345,             // integer ID of the game (from data lines)
+  "features": {                 // arbitrary feature map; schema TBD by Agent 1
+    "home_team_rank": 17,
+    "away_team_rank": 3
+  }
+}
+```
+
+Response body schema:
+
+```jsonc
+{
+  "game_id": 12345,
+  "win_prob": 0.73              // model-predicted probability that `game_id` home team wins.
+}
+```
+
+## Usage Examples
+
+```bash
+# Local dev (CPU)
+ray start --head &
+export MODEL_URI=models/best.pt
+python -m serve.app
+
+# Query
+curl -X POST http://127.0.0.1:8000/predict \
+     -H "Content-Type: application/json" \
+     -d '{"game_id": 1, "features": {}}'
+```
+
+## Deployment on RunPod
+
+The cluster is defined in `.ray/cluster.yaml`.  Spin it up:
+
+```bash
+ray up -y .ray/cluster.yaml        # create head & GPU workers
+ray rsync-up . .                   # sync source code
+ray submit .ray/cluster.yaml python -m serve.app --start
+```
+
+The external URL will be printed by the autoscaler once the Serve HTTP proxy is ready.  Add that URL to the `PREDICT_URL` environment variable for Agent 3 consumers.
