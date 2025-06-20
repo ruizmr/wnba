@@ -36,6 +36,14 @@ from typing import Dict
 
 import os
 
+# Torch is essential for training. We import with an explicit error if missing.
+try:
+    import torch  # type: ignore
+except ModuleNotFoundError as exc:  # pragma: no cover
+    raise ModuleNotFoundError(
+        "PyTorch is required to run training. Install via Conda or ensure 'pytorch' in env.yml."
+    ) from exc
+
 try:
     import ray
     from ray import tune
@@ -44,7 +52,6 @@ try:
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise ModuleNotFoundError("Ray with Train & Tune extras is required. Install ray[air].") from exc
 
-import torch
 from torch.utils.data import DataLoader
 
 from python.graph.builder import build_graph
