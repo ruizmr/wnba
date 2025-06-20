@@ -95,3 +95,27 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector:4318/v1/traces
 ```
 
 Spans are tagged with `service.name = edge-serve`.  Example dashboard: Grafana Tempo + Grafana Loki.
+
+### AuthN
+
+`/predict` is protected by JSON Web Tokens (JWT).  Clients must include:
+
+```
+Authorization: Bearer <token>
+```
+
+Tokens are signed with HS256.  Configure the shared secret via env:
+
+```bash
+export JWT_SECRET="replace-with-32-byte-secret"
+```
+
+Generate token (Python):
+
+```python
+import jwt, time, os
+payload = {"sub": "agent3", "exp": int(time.time()) + 3600}
+print(jwt.encode(payload, os.environ["JWT_SECRET"], algorithm="HS256"))
+```
+
+`/healthz` and `/metrics` remain public for liveness & scraping.

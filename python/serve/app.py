@@ -22,13 +22,14 @@ import os
 from typing import Any, Dict
 import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
 from ray import serve
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from serve.metrics import REQUEST_COUNT, REQUEST_LATENCY
 from serve.tracing import init_tracing
+from serve.auth import verify_jwt
 
 ###############################################################################
 # FastAPI schema
@@ -82,8 +83,8 @@ class ModelServer:  # pylint: disable=too-few-public-methods
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     @app.post("/predict", response_model=PredictResponse)
-    def predict(self, payload: PredictRequest) -> PredictResponse:  # noqa: D401
-        """Return dummy probability until model integration and record metrics."""
+    def predict(self, payload: PredictRequest, user=Depends(verify_jwt)) -> PredictResponse:  # noqa: D401,E501
+        """Return dummy probability; requires valid JWT."""
         start = time.perf_counter()
         # Dummy logic: pseudo-random deterministic.
         prob = (hash(payload.game_id) % 100) / 100.0
