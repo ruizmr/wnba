@@ -4,3 +4,4 @@ __pycache__/
 *.pyd
 *.so
 .env 
+data/cache/*.pkl 
