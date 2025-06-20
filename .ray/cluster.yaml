@@ -1,0 +1,45 @@
+# Ray autoscaler configuration for RunPod.io
+# Reference: https://docs.ray.io/en/latest/cluster/vms/user-guides/runpod-cloud.html
+# 
+# Head node = CPU-only (coordination & lightweight serving)
+# Worker nodes autoscale 0–4 GPUs (RTX A5000 24 GB).
+
+cluster_name: runpod-edge
+
+provider:
+  type: runpod
+  # The below assumes you have `RUNPOD_API_KEY` exported locally.
+  region: us-east-1
+  # Credentials read from env var or ~/.config/runpod
+
+# Set the environment for both head & workers via the same image
+docker:
+  image: runpod/ray:2.9.0-py310-cu118
+  container_name: ray
+  pull_before_run: true
+  run_options:
+    - --ulimit nofile=262144:262144
+
+available_node_types:
+  head_node:
+    node_config:
+      instance_type: CPU
+    resources: {"CPU": 4}
+  gpu_worker:
+    min_workers: 0
+    max_workers: 4
+    node_config:
+      instance_type: GPU-RTXA5000-24GB
+    resources: {"CPU": 8, "GPU": 1}
+
+head_node_type: head_node
+
+setup_commands:
+  - conda env create -f /workspace/env.yml || true
+  - echo "source activate edge-env" >> ~/.bashrc
+  - pip install -U ray[serve]
+
+file_mounts:
+  /workspace: .
+
+idle_timeout_minutes: 30
