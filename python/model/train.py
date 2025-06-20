@@ -1,16 +1,31 @@
 """Training entrypoint for the `MiniHGT` model.
 
-This script is designed to be launched via Ray Jobs or `ray submit` as required
-by Agent 2. It supports local CPU execution for quick smoke tests and Tune-based
-hyperparameter search when running on a multi-GPU cluster.
+This script is launched by Ray **jobs** (`ray job submit`) or Ray **CLI**
+(`ray submit`) and adapts automatically to CPU-only laptops *and* RunPod GPU
+clusters.
 
-Example (local CPU)
--------------------
-ray job submit --runtime-env="{}" python python/model/train.py --smoke-test
+Quick-start 🖥️  (local CPU)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Create/activate the Conda env and run one smoke-test epoch::
 
-Example (RunPod GPU cluster)
----------------------------
-ray submit .ray/cluster.yaml python/model/train.py --num-samples 8 --epochs 3
+    conda activate edge-engine
+    ray job submit --runtime-env="{}" \
+        python python/model/train.py --smoke-test --epochs 1
+
+The command starts a *local* Ray runtime, runs a single hyper-parameter sample,
+and exits in < 1 minute.
+
+Production 🚀  (RunPod GPU cluster)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Assuming Agent 2's cluster config is in `.ray/cluster.yaml` and the repo has
+been pushed to the head node::
+
+    ray submit .ray/cluster.yaml \
+        python/model/train.py \
+        --num-samples 8 --epochs 3
+
+Ray Tune will orchestrate 8 trials across the A5000 GPU workers, each training
+for 3 epochs, and then save the best checkpoint.
 """
 
 from __future__ import annotations
@@ -116,7 +131,21 @@ def main() -> None:  # noqa: D401
     file_path = out_dir / "best.pt"
     torch.save(best_checkpoint.to_dict()["model_state_dict"], file_path)
 
-    print(f"🏆 Saved best model to {file_path.resolve()}")
+    # ------------------------------------------------------------------
+    # Publish model URI for downstream agents (Serve + CLI).
+    # ------------------------------------------------------------------
+    import os  # local import to keep top-level lean
+
+    prefix = os.getenv("MODEL_URI_PREFIX", "file://")  # Agent 2 may set to runpod://…
+    model_uri = prefix.rstrip("/") + "/" + str(file_path.resolve())
+
+    # Persist for other jobs & print for logs.
+    uri_file = out_dir / "latest_uri.txt"
+    with open(uri_file, "w", encoding="utf-8") as fh:
+        fh.write(model_uri)
+
+    print(f"🏆 Saved best model → {file_path.resolve()}")
+    print(f"🔗 Published model URI  → {model_uri}")
 
 
 if __name__ == "__main__":

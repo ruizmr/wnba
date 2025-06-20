@@ -15,6 +15,7 @@ remote task *or* locally for unit tests.
 from __future__ import annotations
 
 from typing import Tuple
+from pathlib import Path
 
 try:
     from torch_geometric.data import HeteroData  # type: ignore
@@ -126,3 +127,66 @@ def _sanity_check() -> Tuple[int, int]:  # noqa: D401
     ds_lines, ds_results = _tiny_fake_datasets()
     graph = build_graph(ds_lines, ds_results)
     return graph["team"].num_nodes, graph["game"].num_nodes
+
+# -----------------------------------------------------------------------------
+# Caching helpers & CLI
+# -----------------------------------------------------------------------------
+
+
+def save_graph(graph: "HeteroData", output_path: str | Path) -> None:  # noqa: D401, ANN402
+    """Serialize a PyG ``HeteroData`` object to disk via ``torch.save``.
+
+    Parameters
+    ----------
+    graph
+        Graph produced by :func:`build_graph`.
+    output_path
+        File destination (``.pt``).
+    """
+
+    import torch
+
+    out_path = Path(output_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(graph, out_path)
+
+
+def _cli() -> None:  # noqa: D401
+    """CLI helper so the module can be executed with ``python -m python.graph.builder``.
+
+    Example
+    -------
+    Build graph from Parquet datasets residing under ``data/raw/2024-01-01`` and
+    write cache file to ``data/graph_cache/2024-01-01.pt``::
+
+        python -m python.graph.builder \
+            --lines data/raw/2024-01-01/lines \
+            --results data/raw/2024-01-01/results \
+            --out data/graph_cache/2024-01-01.pt
+    """
+
+    import argparse
+    from pathlib import Path
+
+    try:
+        import ray
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise ModuleNotFoundError("Ray is required for CLI graph caching; install ray.") from exc
+
+    parser = argparse.ArgumentParser(description="Build and cache HeteroData graph")
+    parser.add_argument("--lines", type=Path, required=True, help="Parquet dir of LineRow snapshots")
+    parser.add_argument("--results", type=Path, required=True, help="Parquet dir of ResultRow rows")
+    parser.add_argument("--out", type=Path, required=True, help="Destination .pt file path")
+    args = parser.parse_args()
+
+    ray.init(address="auto", ignore_reinit_error=True)
+    ds_lines = ray.data.read_parquet(str(args.lines))
+    ds_results = ray.data.read_parquet(str(args.results))
+
+    graph = build_graph(ds_lines, ds_results)
+    save_graph(graph, args.out)
+    print(f"✅ Cached graph to {args.out.resolve()}")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    _cli()
