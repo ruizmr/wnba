@@ -25,13 +25,26 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import List
 
+# ------------------------------------------------------------------
+# Third-party dependencies with actionable error messages
+# ------------------------------------------------------------------
+
 try:
-    import ray
-    from ray.data import Dataset
+    import ray  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise ModuleNotFoundError(
-        "Ray (with the 'data' extra) is required to run nightly_fetch. Install via `pip install ray[data]` "
-        "or ensure `ray[default,air,data]` is present in env.yml."
+        "The `ray` library is required for nightly_fetch. Install it with\n"
+        "    pip install \"ray[default,air,data]\"\n"
+        "or recreate the supplied Conda environment (`conda env create -f env.yml`)."
+    ) from exc
+
+try:
+    from ray.data import Dataset  # type: ignore
+except ModuleNotFoundError as exc:  # pragma: no cover
+    raise ModuleNotFoundError(
+        "`ray.data` is missing. Make sure you installed Ray with the *data* extra:\n"
+        "    pip install \"ray[data]\"\n"
+        "(The full command `pip install \"ray[default,air,data]\"` is safest.)"
     ) from exc
 
 from python.data.schema import LineRow, ResultRow
