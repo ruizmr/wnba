@@ -136,9 +136,17 @@ def main() -> None:  # noqa: D401
         # Publish model URI for downstream agents (Serve + CLI).
         # ------------------------------------------------------------------
         import os  # local import to keep top-level lean
+        from urllib.parse import urlparse
 
         prefix = os.getenv("MODEL_URI_PREFIX", "file://")  # Agent 2 may set to runpod://…
         model_uri = prefix.rstrip("/") + "/" + str(file_path.resolve())
+
+        # Basic validation – must have scheme://
+        parsed = urlparse(model_uri)
+        if not parsed.scheme:
+            raise ValueError(
+                f"MODEL_URI_PREFIX produced an invalid URI: '{model_uri}'. Prefix must include scheme like 'file://' or 'runpod://'."
+            )
 
         # Persist for other jobs & print for logs.
         uri_file = out_dir / "latest_uri.txt"

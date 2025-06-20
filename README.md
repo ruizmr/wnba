@@ -59,4 +59,19 @@ For further details see `agents.md`.
 > developers may comment-out the three CUDA-labelled lines if Conda cannot find
 > a compatible toolkit on their machine.
 
+## Development setup
+Before running any code, set up the Conda environment **and** install the repo
+in *editable* mode so imports resolve in notebooks/IDEs:
+
+```bash
+conda env create -f env.yml   # first-time only
+conda activate edge-engine
+
+# Keep local edits importable without reinstalling
+pip install -e .
+
+# Alternatively (if you do NOT want a site-packages install)
+# export PYTHONPATH=$(pwd)
+```
+
 ```bash
