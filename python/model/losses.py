@@ -26,6 +26,7 @@ __all__ = [
     "brier_score",
     "ece",
     "calibrated_bce_kelly",
+    "CalibratedKellyLoss",
 ]
 
 
@@ -103,3 +104,51 @@ def calibrated_bce_kelly(
     kelly = _kelly_objective(probs, targets, odds)
     loss = alpha * bce + (1 - alpha) * kelly
     return loss, bce.detach(), kelly.detach()
+
+
+class CalibratedKellyLoss(torch.nn.Module):
+    """Cross‐entropy + λ * (negative) Kelly log‐wealth objective.
+
+    Parameters
+    ----------
+    lambda_kelly : float, optional
+        Weight on the Kelly term. 0 ⇒ pure cross‐entropy, 1 ⇒ maximise log‐growth,
+        by default 0.05.
+    eps : float, optional
+        Numerical stability for clipping probabilities, by default 1e-7.
+    k_max : float, optional
+        Cap on absolute Kelly fraction to avoid overbetting, by default 0.5.
+    """
+
+    def __init__(self, lambda_kelly: float = 0.05, eps: float = 1e-7, k_max: float = 0.5):
+        super().__init__()
+        if not (0 <= lambda_kelly <= 1):
+            raise ValueError("lambda_kelly must be in [0, 1]")
+        self.lambda_kelly = lambda_kelly
+        self.eps = eps
+        self.k_max = k_max
+
+    def forward(self, p_hat: torch.Tensor, target: torch.Tensor, odds: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        # ensure tensors broadcast and are floats
+        p_hat = p_hat.squeeze()
+        target = target.squeeze().float()
+        odds = odds.squeeze().float()
+
+        # Probabilities clipping for numerical stability
+        p_hat = torch.clamp(p_hat, self.eps, 1 - self.eps)
+
+        # Cross-entropy
+        ce = F.binary_cross_entropy(p_hat, target, reduction="none")
+
+        # Kelly fraction (clipped)
+        kelly_fraction = (p_hat * odds - 1) / (odds - 1)
+        kelly_fraction = torch.clamp(kelly_fraction, -self.k_max, self.k_max)
+
+        gain_if_win = torch.log1p(kelly_fraction * (odds - 1))  # log(1 + k*(o-1))
+        loss_if_lose = torch.log1p(-kelly_fraction)  # log(1 - k)
+        log_growth = target * gain_if_win + (1 - target) * loss_if_lose
+
+        kelly_term = -log_growth  # maximise log_growth => minimise negative
+
+        loss = ce + self.lambda_kelly * kelly_term
+        return loss.mean()
