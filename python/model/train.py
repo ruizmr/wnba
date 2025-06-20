@@ -74,7 +74,7 @@ from python.data.nightly_fetch import _fake_lines, _fake_results
 # Data loader helpers (placeholder – use in-memory graph for now)
 # -----------------------------------------------------------------------------
 
-def _build_dataset() -> Dict[str, torch.Tensor]:  # noqa: D401
+def _build_dataset(dev_mode: bool = False) -> Dict[str, torch.Tensor]:  # noqa: D401
     try:
         import ray.data  # type: ignore
     except ModuleNotFoundError as exc:  # pragma: no cover
@@ -84,9 +84,18 @@ def _build_dataset() -> Dict[str, torch.Tensor]:  # noqa: D401
 
     from datetime import date
 
-    ray.init(address="auto", ignore_reinit_error=True)
-    ds_lines = ray.data.from_items(_fake_lines(200, date.today()))
-    ds_results = ray.data.from_items(_fake_results(100, date.today()))
+    if dev_mode:
+        ray.init(address="auto", ignore_reinit_error=True)
+        ds_lines = ray.data.from_items(_fake_lines(200, date.today()))
+        ds_results = ray.data.from_items(_fake_results(100, date.today()))
+    else:
+        # Production: load parquet partitions from data lines/results path
+        data_root = Path(os.getenv("DATA_ROOT", "data/parquet"))
+        if not data_root.exists():
+            raise FileNotFoundError("DATA_ROOT path not found and --dev-mode not set")
+        ds_lines = ray.data.read_parquet(str(data_root / "lines"))
+        ds_results = ray.data.read_parquet(str(data_root / "results"))
+
     data = build_graph(ds_lines, ds_results)
 
     return {
@@ -101,7 +110,7 @@ def _build_dataset() -> Dict[str, torch.Tensor]:  # noqa: D401
 # -----------------------------------------------------------------------------
 
 def _train_worker(config):  # noqa: ANN001  D401
-    dataset = _build_dataset()
+    dataset = _build_dataset(config.get("dev_mode", False))
 
     node_types = list(dataset["x_dict"].keys())
     edge_types = list(dataset["edge_index_dict"].keys())
@@ -144,11 +153,12 @@ def main() -> None:  # noqa: D401
     parser.add_argument("--smoke-test", action="store_true", help="Run a quick single epoch training")
     parser.add_argument("--num-samples", type=int, default=4, help="Number of hyperparameter samples")
     parser.add_argument("--epochs", type=int, default=5, help="Epochs per trial")
+    parser.add_argument("--dev-mode", action="store_true", help="Use fake in-memory dataset for quick tests")
     args = parser.parse_args()
 
     ray.init(address="auto", ignore_reinit_error=True)
 
-    config = {"lr": tune.loguniform(1e-4, 1e-2), "epochs": args.epochs}
+    config = {"lr": tune.loguniform(1e-4, 1e-2), "epochs": args.epochs, "dev_mode": args.dev_mode}
 
     if args.smoke_test:
         config["lr"] = 1e-3
