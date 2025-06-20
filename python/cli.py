@@ -19,6 +19,7 @@ from rich.table import Table
 
 from python.lenses import kelly_fraction
 from python.aggregate import geo_mean
+from python.report.daily import generate_daily_report
 
 app = typer.Typer(add_completion=False)
 console = Console()
@@ -145,6 +146,16 @@ def view_ledger(head: int = typer.Option(10, help="Number of rows to show")):
     for row in rows_tail:
         table.add_row(*[row[c] for c in table.columns.keys()])
     console.print(table)
+
+
+@app.command()
+def report_daily(
+    ledger: Path = typer.Option("ledger.csv", help="Path to ledger CSV"),
+    starting_bankroll: float = typer.Option(1000.0, help="Starting bankroll for metrics"),
+):
+    """Generate HTML daily report from ledger and print output path."""
+    output_path = generate_daily_report(ledger_path=Path(ledger), starting_bankroll=starting_bankroll)
+    console.print(f"[green]Report generated:[/green] {output_path}")
 
 
 if __name__ == "__main__":  # pragma: no cover
