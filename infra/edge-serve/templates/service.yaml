@@ -1,0 +1,17 @@
+{{- $fullname := include "edge-serve.fullname" . -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "edge-serve.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
