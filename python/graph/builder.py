@@ -147,9 +147,9 @@ def save_graph(graph: "HeteroData", output_path: str | Path) -> None:  # noqa: D
         File destination (``.pt``).
     """
 
-    import torch
-
     try:
+        import torch  # type: ignore
+
         if not isinstance(graph, HeteroData):
             raise TypeError(
                 "save_graph expects a `torch_geometric.data.HeteroData` instance; "
