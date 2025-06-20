@@ -1,0 +1,6 @@
+pytest
+pytest-cov
+typer
+rich
+jinja2
+pre-commit
