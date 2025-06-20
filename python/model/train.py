@@ -92,7 +92,16 @@ def _build_dataset(dev_mode: bool = False) -> Dict[str, torch.Tensor]:  # noqa: 
         # Production: load parquet partitions from data lines/results path
         data_root = Path(os.getenv("DATA_ROOT", "data/parquet"))
         if not data_root.exists():
-            raise FileNotFoundError("DATA_ROOT path not found and --dev-mode not set")
+            # Fallback: auto‐discover latest partition under data/raw/YYYY-MM-DD
+            raw_root = Path("data/raw")
+            if not raw_root.exists():
+                raise FileNotFoundError("No raw data found under data/raw. Run nightly_fetch first or set --dev-mode.")
+            subdirs = [p for p in raw_root.iterdir() if p.is_dir()]
+            if not subdirs:
+                raise FileNotFoundError("data/raw is empty; cannot locate dataset partitions.")
+            latest = max(subdirs)
+            data_root = latest
+            print(f"[train] DATA_ROOT not set – using latest raw partition {latest}")
         ds_lines = ray.data.read_parquet(str(data_root / "lines"))
         ds_results = ray.data.read_parquet(str(data_root / "results"))
 
