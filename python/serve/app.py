@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from ray import serve
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from serve.metrics import REQUEST_COUNT, REQUEST_LATENCY
+from serve.tracing import init_tracing
 
 ###############################################################################
 # FastAPI schema
@@ -53,6 +54,9 @@ class PredictResponse(BaseModel):
 ###############################################################################
 
 app = FastAPI()
+
+# Initialize OpenTelemetry tracing (no-op if already configured)
+init_tracing(app)
 
 
 @serve.deployment(name="edge-model", num_replicas=1, route_prefix="/")

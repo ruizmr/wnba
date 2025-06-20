@@ -84,3 +84,14 @@ ray submit .ray/cluster.yaml python -m serve.app --start
 ```
 
 The external URL will be printed by the autoscaler once the Serve HTTP proxy is ready.  Add that URL to the `PREDICT_URL` environment variable for Agent 3 consumers.
+
+### Tracing (OpenTelemetry)
+
+On startup the service auto-instruments FastAPI via OTLP HTTP exporter.
+Set environment variable before launching:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector:4318/v1/traces
+```
+
+Spans are tagged with `service.name = edge-serve`.  Example dashboard: Grafana Tempo + Grafana Loki.
