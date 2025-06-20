@@ -1,0 +1,55 @@
+name: Nightly Pipeline
+
+on:
+  # 06:00 UTC daily
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+env:
+  RAY_ADDRESS: ${{ secrets.RAY_ADDRESS }}
+
+jobs:
+  fetch_lines:
+    name: Nightly Fetch Lines
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ray CLI
+        run: pip install "ray[default]==2.10.0"
+
+      - name: Submit Ray Job – fetch
+        run: |
+          ray job submit --address "$RAY_ADDRESS" \
+            -- python -m python.data.nightly_fetch
+
+  train_model:
+    name: Train Model
+    runs-on: ubuntu-latest
+    needs: fetch_lines
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ray CLI
+        run: pip install "ray[default]==2.10.0"
+
+      - name: Submit Ray Job – train
+        run: |
+          ray job submit --address "$RAY_ADDRESS" \
+            -- python -m python.model.train --epochs 1
+
+  daily_report:
+    name: Generate Daily Report
+    runs-on: ubuntu-latest
+    needs: train_model
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ray CLI
+        run: pip install "ray[default]==2.10.0"
+
+      - name: Submit Ray Job – report
+        run: |
+          ray job submit --address "$RAY_ADDRESS" \
+            -- python -m python.report.daily
