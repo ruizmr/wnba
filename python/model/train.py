@@ -56,7 +56,14 @@ except ModuleNotFoundError as exc:  # pragma: no cover
         "or activate the Conda env defined in env.yml."
     ) from exc
 
-from torch.utils.data import DataLoader
+# torch utils ---------------------------------------------------------------
+try:
+    from torch.utils.data import DataLoader  # type: ignore
+except ModuleNotFoundError as exc:  # pragma: no cover
+    raise ModuleNotFoundError(
+        "`torch.utils.data` is missing. Make sure PyTorch is installed: `pip install torch --extra-index-url https://download.pytorch.org/whl/cpu` "
+        "or simply create the provided Conda env (`env.yml`)."
+    ) from exc
 
 from python.graph.builder import build_graph
 from python.model.hgt import MiniHGT

@@ -95,4 +95,15 @@ Every contributor should follow **one** of the two patterns below so that local
 If your IDE still reports "import not found", double-check that it is using
 the `edge-engine` interpreter.
 
+## Common "import not found" fixes
+| Missing package | One-liner fix |
+|-----------------|---------------|
+| torch           | `pip install torch --extra-index-url https://download.pytorch.org/whl/cpu` |
+| torch_geometric | `pip install torch-geometric` *(plus scatter/sparse wheels)* |
+| ray             | `pip install "ray[default,air,data,train,serve]"` |
+| numpy           | `pip install numpy` |
+| pydantic        | `pip install pydantic` |
+
+If you **did** run `conda env create -f env.yml` these should already be present.
+
 ```bash
