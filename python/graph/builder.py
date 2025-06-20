@@ -148,6 +148,10 @@ def save_graph(graph: "HeteroData", output_path: str | Path) -> None:  # noqa: D
 
     try:
         out_path = Path(output_path)
+        if out_path.suffix != ".pt":
+            raise ValueError(
+                f"Output path '{out_path}' must have a '.pt' extension to store a Torch graph file."
+            )
         out_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(graph, out_path)
     except Exception as exc:  # noqa: BLE001

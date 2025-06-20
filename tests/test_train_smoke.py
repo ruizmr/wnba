@@ -1,6 +1,6 @@
-import pytest
+import pytest  # type: ignore
 
-import torch
+import torch  # type: ignore
 
 from python.data.nightly_fetch import _fake_lines, _fake_results
 from python.graph.builder import build_graph

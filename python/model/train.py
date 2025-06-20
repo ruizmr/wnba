@@ -34,6 +34,8 @@ import argparse
 from pathlib import Path
 from typing import Dict
 
+import os
+
 try:
     import ray
     from ray import tune
@@ -116,6 +118,12 @@ def main() -> None:  # noqa: D401
         config["lr"] = 1e-3
         args.num_samples = 1
 
+    # If user sets --gpu flag (detected by CUDA env), validate CUDA availability.
+    if os.environ.get("FORCE_GPU", "0") == "1" and not torch.cuda.is_available():
+        raise EnvironmentError(
+            "FORCE_GPU=1 but CUDA is not available. Install CUDA-enabled PyTorch or unset FORCE_GPU."
+        )
+
     tuner = tune.Tuner(
         _train_worker,
         param_space=config,
@@ -135,10 +143,12 @@ def main() -> None:  # noqa: D401
         # ------------------------------------------------------------------
         # Publish model URI for downstream agents (Serve + CLI).
         # ------------------------------------------------------------------
-        import os  # local import to keep top-level lean
         from urllib.parse import urlparse
 
         prefix = os.getenv("MODEL_URI_PREFIX", "file://")  # Agent 2 may set to runpod://…
+        if not file_path.exists():
+            raise FileNotFoundError(f"Expected checkpoint at {file_path} not found.")
+
         model_uri = prefix.rstrip("/") + "/" + str(file_path.resolve())
 
         # Basic validation – must have scheme://
