@@ -67,6 +67,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
 from python.graph.builder import build_graph
 from python.model.hgt import MiniHGT
+from python.model.losses import TemperatureScaler, brier_score, ece, calibrated_bce_kelly
 from python.data.nightly_fetch import _fake_lines, _fake_results
 
 # -----------------------------------------------------------------------------
@@ -105,7 +106,8 @@ def _train_worker(config):  # noqa: ANN001  D401
     node_types = list(dataset["x_dict"].keys())
     edge_types = list(dataset["edge_index_dict"].keys())
     model = MiniHGT(metadata=(node_types, edge_types))
-    optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
+    temp_scaler = TemperatureScaler().to("cpu")
+    optimizer = torch.optim.Adam(list(model.parameters()) + list(temp_scaler.parameters()), lr=config["lr"])
     criterion = torch.nn.CrossEntropyLoss()
 
     n_epochs = config["epochs"]
@@ -113,11 +115,21 @@ def _train_worker(config):  # noqa: ANN001  D401
         model.train()
         optimizer.zero_grad()
         logits = model(dataset["x_dict"], dataset["edge_index_dict"])
-        loss = criterion(logits, dataset["y"])
+
+        odds = torch.full_like(dataset["y"], 2.0, dtype=torch.float32)  # placeholder decimal odds 2.0
+        loss, bce_val, kelly_val = calibrated_bce_kelly(
+            logits, dataset["y"], odds, temp_scaler.temperature, alpha=0.7
+        )
+
+        with torch.no_grad():
+            probs = torch.sigmoid(logits / temp_scaler.temperature)
+            brier = brier_score(probs, dataset["y"]).item()
+            ece_val = ece(probs, dataset["y"]).item()
+
         loss.backward()
         optimizer.step()
 
-        tune.report(loss=loss.item())
+        tune.report(loss=loss.item(), brier=brier, ece=ece_val)
 
     # Return best model.
     checkpoint = Checkpoint.from_dict({"model_state_dict": model.state_dict()})
