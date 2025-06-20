@@ -1,0 +1,9 @@
+.git
+__pycache__
+*.py[cod]
+*.egg-info
+*.ipynb
+dist
+build
+tests
+docs

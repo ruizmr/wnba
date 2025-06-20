@@ -1,31 +1,48 @@
-# ---------- Builder stage ----------
-FROM continuumio/miniconda3:23.11.0-0 AS builder
+########################
+# ─── Build stage ───  #
+########################
+FROM python:3.10-slim AS builder
 
-WORKDIR /workspace
+ENV \
+  PYTHONDONTWRITEBYTECODE=1 \
+  PIP_NO_CACHE_DIR=1 \
+  POETRY_VERSION=1.7.1
 
-# Install Conda env first
-COPY env.yml ./
-RUN conda env create -f env.yml && conda clean -a -y
-ENV PATH /opt/conda/envs/edge-env/bin:$PATH
+# System deps first (layer-cache friendly)
+RUN apt-get update \
+ && apt-get install --no-install-recommends -y build-essential git curl \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy source and run lint (does not fail build if hooks not installed)
-COPY . /workspace
-RUN conda run -n edge-env pre-commit run --all-files --show-diff-on-failure || true
+# Install Poetry to craft a deterministic wheel-house
+RUN pip install "poetry==$POETRY_VERSION"
 
-# ---------- Runtime stage (distroless) ----------
-FROM gcr.io/distroless/base-debian11 AS runtime
+WORKDIR /src
+COPY pyproject.toml poetry.lock* ./
+RUN poetry export --with main --without-hashes -f requirements.txt > /tmp/requirements.txt
+RUN pip install --prefix=/venv -r /tmp/requirements.txt
 
-# Copy Python runtime & environment from builder
-COPY --from=builder /opt/conda/envs/edge-env /opt/conda/envs/edge-env
-COPY --from=builder /workspace /workspace
+# Pull the actual code last (so dep layers cache)
+COPY . .
+RUN pip install --prefix=/venv .
 
-# Non-root user
-RUN adduser --disabled-password --uid 1001 appuser
-USER 1001:1001
+#########################
+# ─── Runtime stage ─── #
+#########################
+FROM python:3.10-slim AS runtime
+ARG REPO_URL="https://github.com/your-org/edge-serve"
+LABEL org.opencontainers.image.source=$REPO_URL
+ENV PATH="/venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
 
-ENV PATH /opt/conda/envs/edge-env/bin:$PATH
-WORKDIR /workspace
+# Create non-root user (uid 1001 keeps k8s happy)
+RUN adduser --disabled-password --gecos "" --uid 1001 edge
+USER edge
+WORKDIR /app
 
-EXPOSE 8000 8265 6379
+# Copy venv & src from builder
+COPY --from=builder /venv /venv
+COPY --from=builder /src /app
 
-ENTRYPOINT ["/opt/conda/envs/edge-env/bin/python", "-m", "serve.app"]
+EXPOSE 8000
+ENTRYPOINT ["python", "-m", "python.serve.app"]
