@@ -1,4 +1,4 @@
-import pytest
+import pytest  # type: ignore
 
 from python.graph.builder import _tiny_fake_datasets, build_graph
 
