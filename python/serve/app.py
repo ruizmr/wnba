@@ -22,7 +22,7 @@ import os
 from typing import Any, Dict
 import time
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from ray import serve
@@ -32,6 +32,7 @@ from serve.tracing import init_tracing
 from serve.auth import verify_jwt
 from serve.rate_limit import init_rate_limit
 from serve.model_loader import load_mini_hgt
+from config import get_settings
 
 ###############################################################################
 # FastAPI schema
@@ -73,6 +74,8 @@ class PredictResponse(BaseModel):
 
 app = FastAPI()
 
+settings = get_settings()
+
 # Initialize shared middlewares
 init_tracing(app)
 limiter = init_rate_limit(app)
@@ -84,16 +87,21 @@ class ModelServer:  # pylint: disable=too-few-public-methods
     """Thin wrapper around the Torch model checkpoint."""
 
     def __init__(self) -> None:
-        self.model_uri: str = os.getenv("MODEL_URI", "models/best.pt")
+        self.model_uri: str = settings.model_uri
 
-        # Load MiniHGT checkpoint – if fails, stay in degraded mode.
+        # Load MiniHGT checkpoint – if fails, decide based on settings.
         try:
             self.model = load_mini_hgt(self.model_uri)
             self._loaded = True
         except Exception as exc:  # noqa: BLE001
-            print(f"[Serve] ERROR loading model: {exc}. Falling back to dummy predictions.")
-            self.model = None
-            self._loaded = False
+            print(f"[Serve] ERROR loading model: {exc}.")
+            if settings.enable_fallback:
+                print("[Serve] ENABLE_FALLBACK=1 – using deterministic pseudo predictions.")
+                self.model = None
+                self._loaded = False
+            else:
+                # Fail fast – the deployment will stay unhealthy and Helm will roll back.
+                raise
 
     # ---------------- API routes ---------------- #
 
@@ -107,7 +115,7 @@ class ModelServer:  # pylint: disable=too-few-public-methods
         """Prometheus scrape endpoint."""
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-    @limiter.limit("60/minute")
+    @limiter.limit(settings.rate_limit)
     @app.post("/predict", response_model=PredictResponse)
     def predict(self, payload: PredictRequest, user=Depends(verify_jwt)) -> PredictResponse:  # noqa: D401,E501
         """Return model probability; falls back to pseudo-random if model unavailable."""
@@ -116,9 +124,11 @@ class ModelServer:  # pylint: disable=too-few-public-methods
 
         if self._loaded:
             prob = self._infer_single_game(payload)
-        else:
+        elif settings.enable_fallback:
             # Fallback deterministic hash – should rarely trigger in production.
             prob = (hash(payload.game_id) % 100) / 100.0
+        else:
+            raise HTTPException(status_code=503, detail="Model not loaded")
 
         resp = PredictResponse(game_id=payload.game_id, win_prob=float(prob))
         latency = time.perf_counter() - start
