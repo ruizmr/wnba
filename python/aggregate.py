@@ -18,11 +18,12 @@ has not changed.
 """
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Iterable, Sequence, Union, TYPE_CHECKING, List, Any
+
 import hashlib
 import json
 import pickle
-from pathlib import Path
-from typing import Iterable, Sequence, List, Union
 
 CACHE_DIR = Path("data/cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -51,7 +52,7 @@ def _hash_arrays(arrays: Sequence[Sequence[float]]) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def geo_mean(values: Union[List[float], List[List[float]]]) -> float | List[float]:
+def geo_mean(values: Sequence[Union[float, Sequence[float]]]) -> float | list[float]:
     """Geometric mean helper with ergonomic behaviour for *both* scalar and
     vector use-cases.
 
@@ -63,7 +64,7 @@ def geo_mean(values: Union[List[float], List[List[float]]]) -> float | List[floa
     3. Empty input returns ``0.0`` to satisfy edge-case tests.
     """
 
-    values_list = list(values)  # type: ignore[arg-type]
+    values_list = list(values)  # convert to concrete list for iteration
     if not values_list:
         return 0.0
 
