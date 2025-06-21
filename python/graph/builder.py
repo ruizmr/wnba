@@ -75,7 +75,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     class _HeteroData(dict[Any, Any]):  # type: ignore
         """Extremely light clone of `torch_geometric.data.HeteroData`."""
 
-        def __getitem__(self, key):
+        def __getitem__(self, key: Any) -> Any:  # type: ignore[override]
+            """Get or auto-create a node/edge container."""
             if key not in self:
                 # Distinguish between node and edge keys by type.
                 self[key] = _Edge() if isinstance(key, tuple) else _Node()
