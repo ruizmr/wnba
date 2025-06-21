@@ -14,14 +14,27 @@ remote task *or* locally for unit tests.
 
 from __future__ import annotations
 
-from typing import Tuple, TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Tuple, Any
 from pathlib import Path
 
-if TYPE_CHECKING:  # pragma: no cover
+# ---------------------------------------------------------------------------
+# Optional heavyweight deps (only imported for static type checking)
+# ---------------------------------------------------------------------------
+
+if TYPE_CHECKING:  # pragma: no cover – avoid runtime dependency
+    from torch_geometric.data import HeteroData  # type: ignore
     from ray.data import Dataset  # type: ignore
+else:
+    HeteroData = Any  # type: ignore[assignment]
+    Dataset = Any      # type: ignore[assignment]
+
+# If torch_geometric is missing at *runtime* we fall back to a stub defined
+# below.  This logic must remain AFTER the TYPE_CHECKING block so mypy sees the
+# real class while CI containers can still execute.
 
 try:
-    from torch_geometric.data import HeteroData  # type: ignore
+    from torch_geometric.data import HeteroData as _RuntimeHetero  # type: ignore
+    HeteroData = _RuntimeHetero  # type: ignore[assignment]
 except ModuleNotFoundError as exc:  # pragma: no cover
     # ------------------------------------------------------------------
     # Graceful fallback 🚑
@@ -101,7 +114,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
     # Finally, expose the stub in the local namespace so the rest of this file
     # works transparently.
-    HeteroData = _HeteroData  # type: ignore
+    HeteroData = _HeteroData  # type: ignore[assignment]
 
 try:
     import numpy as np  # type: ignore
