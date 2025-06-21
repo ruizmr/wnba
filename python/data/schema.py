@@ -76,7 +76,7 @@ class PlayerBoxRow(BaseModel):
     points: Optional[int] = None
     rebounds: Optional[int] = None
     assists: Optional[int] = None
-    plus_minus: Optional[float] = Field(None, alias="plus_minus")
+    plus_minus: Optional[str] = Field(None, alias="plus_minus")
 
 
 __all__ = [
