@@ -22,22 +22,22 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 if TYPE_CHECKING:  # pragma: no cover – avoid runtime dependency
-    from torch_geometric.data import HeteroData  # type: ignore
-    from ray.data import Dataset  # type: ignore
+    from torch_geometric.data import HeteroData  # type: ignore[import-not-found]
+    from ray.data import Dataset
 else:
     # At runtime we may not have the heavyweight deps installed.  Use `Any`
     # placeholders so normal execution continues while static checkers still
     # see concrete types via the TYPE_CHECKING branch above.
-    HeteroData = Any  # type: ignore[assignment]
-    Dataset = Any  # type: ignore[assignment]
+    HeteroData = Any
+    Dataset = Any
 
 # If torch_geometric is missing at *runtime* we fall back to a stub defined
 # below.  This logic must remain AFTER the TYPE_CHECKING block so mypy sees the
 # real class while CI containers can still execute.
 
 try:
-    from torch_geometric.data import HeteroData as _RuntimeHetero  # type: ignore
-    HeteroData = cast("type[object]", _RuntimeHetero)  # type: ignore[assignment]
+    from torch_geometric.data import HeteroData as _RuntimeHetero
+    HeteroData = cast("type[object]", _RuntimeHetero)
 except ModuleNotFoundError as exc:  # pragma: no cover
     # ------------------------------------------------------------------
     # Graceful fallback 🚑
@@ -56,7 +56,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     class _Node:
         """Minimal node container mirroring PyG's attribute behaviour."""
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.x: _NDArray | None = None
             self.y: _NDArray | None = None
 
@@ -69,13 +69,13 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     class _Edge:
         """Edge container stub with an `edge_index` attribute."""
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.edge_index: _NDArray | None = None
 
-    class _HeteroData(dict[Any, Any]):  # type: ignore
+    class _HeteroData(dict[Any, Any]):
         """Extremely light clone of `torch_geometric.data.HeteroData`."""
 
-        def __getitem__(self, key: Any) -> Any:  # type: ignore[override]
+        def __getitem__(self, key: Any) -> Any:
             """Get or auto-create a node/edge container."""
             if key not in self:
                 # Distinguish between node and edge keys by type.
@@ -88,14 +88,14 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
         def metadata(self) -> Tuple[List[str], List[Tuple[str, str, str]]]:  # noqa: D401
             """Return lists of node- and edge-type keys (PyG compatibility)."""
-            node_types = [cast(str, k) for k in self.keys() if isinstance(k, str)]
-            edge_types = [cast(Tuple[str, str, str], k) for k in self.keys() if isinstance(k, tuple)]
+            node_types = [k for k in self.keys() if isinstance(k, str)]
+            edge_types = [k for k in self.keys() if isinstance(k, tuple)]
             return node_types, edge_types
 
         @property
         def x_dict(self) -> Dict[str, _NDArray | None]:  # noqa: D401
             """Mapping of node-type → feature matrix."""
-            return {cast(str, k): cast(_Node, v).x for k, v in self.items() if isinstance(k, str)}
+            return {k: cast(_Node, v).x for k, v in self.items() if isinstance(k, str)}
 
         @property
         def edge_index_dict(self) -> Dict[Tuple[str, str, str], _NDArray | None]:  # noqa: D401
@@ -122,10 +122,10 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
     # Finally, expose the stub in the local namespace so the rest of this file
     # works transparently.
-    HeteroData = cast("type[object]", _HeteroData)  # type: ignore[assignment]
+    HeteroData = cast("type[object]", _HeteroData)
 
 try:
-    import numpy as np  # type: ignore
+    import numpy as np
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise ModuleNotFoundError(
         "NumPy is required for graph building. Install with `pip install numpy` or via Conda."
@@ -135,7 +135,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 # Public API
 # -----------------------------------------------------------------------------
 
-def build_graph(ds_lines, ds_results) -> HeteroData:  # noqa: D401, ANN001
+def build_graph(ds_lines: Dataset, ds_results: Dataset) -> HeteroData:
     """Build a PyG `HeteroData` object from Ray datasets.
 
     Parameters
@@ -197,8 +197,7 @@ def build_graph(ds_lines, ds_results) -> HeteroData:  # noqa: D401, ANN001
 # Simple smoke test – executed via `pytest -q`.
 # -----------------------------------------------------------------------------
 
-
-def _tiny_fake_datasets() -> Tuple["Dataset", "Dataset"]:  # noqa: D401
+def _tiny_fake_datasets() -> Tuple[Dataset, Dataset]:
     """Return small in‐memory Ray datasets for testing."""
 
     try:
@@ -254,7 +253,7 @@ def save_graph(graph: "HeteroData", output_path: str | Path) -> None:  # noqa: D
         )
 
     try:
-        import torch  # type: ignore
+        import torch
 
         if not isinstance(graph, HeteroData):
             raise TypeError(
