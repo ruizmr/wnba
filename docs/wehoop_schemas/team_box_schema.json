@@ -1,0 +1,14 @@
+{
+  "fields": [
+    {"name": "game_id", "type": "int32", "nullable": true},
+    {"name": "season", "type": "int32", "nullable": true},
+    {"name": "team_id", "type": "int32", "nullable": true},
+    {"name": "team_score", "type": "int32", "nullable": true},
+    {"name": "team_winner", "type": "bool", "nullable": true},
+    {"name": "assists", "type": "int32", "nullable": true},
+    {"name": "rebounds", "type": "int32", "nullable": true},
+    {"name": "turnovers", "type": "int32", "nullable": true},
+    {"name": "field_goal_pct", "type": "double", "nullable": true},
+    {"name": "three_point_field_goal_pct", "type": "double", "nullable": true}
+  ]
+}

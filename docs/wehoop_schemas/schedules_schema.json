@@ -1,0 +1,16 @@
+{
+  "fields": [
+    {"name": "id", "type": "int32", "nullable": true},
+    {"name": "date", "type": "string", "nullable": true},
+    {"name": "season", "type": "int32", "nullable": true},
+    {"name": "season_type", "type": "int32", "nullable": true},
+    {"name": "home_id", "type": "int32", "nullable": true},
+    {"name": "home_abbreviation", "type": "string", "nullable": true},
+    {"name": "away_id", "type": "int32", "nullable": true},
+    {"name": "away_abbreviation", "type": "string", "nullable": true},
+    {"name": "venue_full_name", "type": "string", "nullable": true},
+    {"name": "status_type_state", "type": "string", "nullable": true},
+    {"name": "game_date_time", "type": "timestamp[us, tz=America/New_York]", "nullable": true},
+    {"name": "game_date", "type": "date32[day]", "nullable": true}
+  ]
+}

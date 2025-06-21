@@ -1,0 +1,23 @@
+{
+  "fields": [
+    {"name": "game_id", "type": "int32", "nullable": true},
+    {"name": "season", "type": "int32", "nullable": true},
+    {"name": "athlete_id", "type": "int32", "nullable": true},
+    {"name": "team_id", "type": "int32", "nullable": true},
+    {"name": "minutes", "type": "double", "nullable": true},
+    {"name": "field_goals_made", "type": "int32", "nullable": true},
+    {"name": "field_goals_attempted", "type": "int32", "nullable": true},
+    {"name": "three_point_field_goals_made", "type": "int32", "nullable": true},
+    {"name": "three_point_field_goals_attempted", "type": "int32", "nullable": true},
+    {"name": "free_throws_made", "type": "int32", "nullable": true},
+    {"name": "free_throws_attempted", "type": "int32", "nullable": true},
+    {"name": "rebounds", "type": "int32", "nullable": true},
+    {"name": "assists", "type": "int32", "nullable": true},
+    {"name": "steals", "type": "int32", "nullable": true},
+    {"name": "blocks", "type": "int32", "nullable": true},
+    {"name": "turnovers", "type": "int32", "nullable": true},
+    {"name": "fouls", "type": "int32", "nullable": true},
+    {"name": "plus_minus", "type": "string", "nullable": true},
+    {"name": "points", "type": "int32", "nullable": true}
+  ]
+}
