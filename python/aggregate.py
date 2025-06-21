@@ -19,7 +19,7 @@ has not changed.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Sequence, Union, TYPE_CHECKING, List, Any
+from typing import Iterable, Sequence, Union, TYPE_CHECKING, TypeVar, overload
 
 import hashlib
 import json
@@ -32,25 +32,24 @@ __all__ = ["geo_mean", "learn_weights_ridge", "weighted_mean", "_cache_path"]
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Generic numeric TypeVar
 # ---------------------------------------------------------------------------
 
-def _cache_path(key: str) -> Path:
-    """Return a deterministic cache path for *key*."""
-    return CACHE_DIR / f"ridge_{key}.pkl"
-
-
-def _hash_arrays(arrays: Sequence[Sequence[float]]) -> str:
-    """Deterministically hash *arrays* for cache invalidation."""
-    m = hashlib.sha256()
-    for arr in arrays:
-        m.update(json.dumps(list(arr), sort_keys=True).encode())
-    return m.hexdigest()[:16]
+T = TypeVar("T", bound=float)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+# Overloads help mypy understand the two valid call signatures.
+
+@overload
+def geo_mean(values: Sequence[T]) -> float: ...  # pragma: no cover
+
+@overload
+def geo_mean(values: Sequence[Sequence[T]]) -> list[float]: ...  # pragma: no cover
+
 
 def geo_mean(values: Sequence[Union[float, Sequence[float]]]) -> float | list[float]:
     """Geometric mean helper with ergonomic behaviour for *both* scalar and
@@ -68,17 +67,17 @@ def geo_mean(values: Sequence[Union[float, Sequence[float]]]) -> float | list[fl
     if not values_list:
         return 0.0
 
-    first = values_list[0]
+    first = values_list[0]  # runtime sample to branch on shape
 
     # Case 1 ‑ flat list of floats
     if isinstance(first, (int, float)):
         prod = 1.0
         for v in values_list:  # type: ignore[arg-type]
-            prod *= float(v)
+            prod *= float(v)  # explicit cast silences ConvertibleToFloat
         return prod ** (1.0 / len(values_list))
 
-    # Case 2 ‑ list of iterables → ensemble element-wise geo mean
-    vectors = [list(map(float, vec)) for vec in values_list]  # type: ignore[arg-type]
+    # Case 2 ‑ list of iterables → ensemble element-wise geometric mean.
+    vectors: list[list[float]] = [list(map(float, vec)) for vec in values_list]  # type: ignore[arg-type]
     n_models = len(vectors)
     n_samples = len(vectors[0])
     if any(len(v) != n_samples for v in vectors):
@@ -207,3 +206,20 @@ def weighted_mean(*preds: Iterable[float], weights: Sequence[float]) -> list[flo
             s += w * p[i]
         out.append(s)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Helper functions (typed)
+# ---------------------------------------------------------------------------
+
+def _cache_path(key: str) -> Path:  # noqa: D401
+    """Return a deterministic cache path for *key*."""
+    return CACHE_DIR / f"ridge_{key}.pkl"
+
+
+def _hash_arrays(arrays: Sequence[Sequence[float]]) -> str:
+    """Deterministically hash *arrays* for cache invalidation."""
+    m = hashlib.sha256()
+    for arr in arrays:
+        m.update(json.dumps(list(arr), sort_keys=True).encode())
+    return m.hexdigest()[:16]
