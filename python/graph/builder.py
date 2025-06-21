@@ -14,7 +14,7 @@ remote task *or* locally for unit tests.
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Tuple, TYPE_CHECKING, Any
 from pathlib import Path
 
 try:
@@ -32,13 +32,14 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
     import types
     import numpy as _np  # local alias to avoid clobbering outer scope
+    from numpy import ndarray as _NDArray
 
     class _Node:
         """Minimal node container mirroring PyG's attribute behaviour."""
 
         def __init__(self):
-            self.x: "_np.ndarray | None" = None  # type: ignore[type-arg]
-            self.y: "_np.ndarray | None" = None  # type: ignore[type-arg]
+            self.x: _NDArray | None = None
+            self.y: _NDArray | None = None
 
         @property
         def num_nodes(self) -> int:  # noqa: D401
@@ -50,7 +51,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
         """Edge container stub with an `edge_index` attribute."""
 
         def __init__(self):
-            self.edge_index: "_np.ndarray | None" = None  # type: ignore[type-arg]
+            self.edge_index: _NDArray | None = None
 
     class _HeteroData(dict):  # type: ignore
         """Extremely light clone of `torch_geometric.data.HeteroData`."""
@@ -173,7 +174,7 @@ def build_graph(ds_lines, ds_results) -> HeteroData:  # noqa: D401, ANN001
 # -----------------------------------------------------------------------------
 
 
-def _tiny_fake_datasets():  # noqa: D401
+def _tiny_fake_datasets() -> Tuple[Any, Any]:  # noqa: D401
     """Return small in‐memory Ray datasets for testing."""
 
     try:
