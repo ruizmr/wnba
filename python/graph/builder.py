@@ -17,6 +17,9 @@ from __future__ import annotations
 from typing import Tuple, TYPE_CHECKING, Any
 from pathlib import Path
 
+if TYPE_CHECKING:  # pragma: no cover
+    from ray.data import Dataset  # type: ignore
+
 try:
     from torch_geometric.data import HeteroData  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover
@@ -174,7 +177,7 @@ def build_graph(ds_lines, ds_results) -> HeteroData:  # noqa: D401, ANN001
 # -----------------------------------------------------------------------------
 
 
-def _tiny_fake_datasets() -> Tuple[Any, Any]:  # noqa: D401
+def _tiny_fake_datasets() -> Tuple["Dataset", "Dataset"]:  # noqa: D401
     """Return small in‐memory Ray datasets for testing."""
 
     try:
