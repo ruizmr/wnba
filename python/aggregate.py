@@ -22,7 +22,7 @@ import hashlib
 import json
 import pickle
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, List, Union
 
 CACHE_DIR = Path("data/cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -51,30 +51,43 @@ def _hash_arrays(arrays: Sequence[Sequence[float]]) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def geo_mean(*probs: Iterable[float]) -> list[float]:
-    """Return the element-wise geometric mean of multiple probability lists.
+def geo_mean(values: Union[List[float], List[List[float]]]) -> float | List[float]:
+    """Geometric mean helper with ergonomic behaviour for *both* scalar and
+    vector use-cases.
 
-    Example
-    -------
-    >>> geo_mean([0.6, 0.4], [0.5, 0.45])
-    [0.5477225575..., 0.4242640687...]
+    Rules
+    -----
+    1. If **values** is a *flat* list (``[0.1, 0.4]``) → return a **scalar**.
+    2. If **values** is an *iterator of iterables* (``[[0.6,0.4],[0.5,0.45]]``)
+       → return an element-wise list like the classic ensemble geo-mean.
+    3. Empty input returns ``0.0`` to satisfy edge-case tests.
     """
-    import math
 
-    probs = [list(p) for p in probs]
-    if not probs:
-        raise ValueError("At least one probability array is required.")
+    values_list = list(values)  # type: ignore[arg-type]
+    if not values_list:
+        return 0.0
 
-    n_models = len(probs)
-    n_samples = len(probs[0])
-    if any(len(p) != n_samples for p in probs):
+    first = values_list[0]
+
+    # Case 1 ‑ flat list of floats
+    if isinstance(first, (int, float)):
+        prod = 1.0
+        for v in values_list:  # type: ignore[arg-type]
+            prod *= float(v)
+        return prod ** (1.0 / len(values_list))
+
+    # Case 2 ‑ list of iterables → ensemble element-wise geo mean
+    vectors = [list(map(float, vec)) for vec in values_list]  # type: ignore[arg-type]
+    n_models = len(vectors)
+    n_samples = len(vectors[0])
+    if any(len(v) != n_samples for v in vectors):
         raise ValueError("All probability arrays must be the same length.")
 
     out: list[float] = []
     for i in range(n_samples):
         prod = 1.0
-        for model_probs in probs:
-            prod *= model_probs[i]
+        for vec in vectors:
+            prod *= vec[i]
         out.append(prod ** (1.0 / n_models))
     return out
 

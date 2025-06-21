@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 from datetime import date, datetime
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 # ------------------------------------------------------------------
 # Third-party dependencies with actionable error messages
@@ -39,64 +39,44 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     ) from exc
 
 try:
-    from ray.data import Dataset  # type: ignore
+    import ray.data  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise ModuleNotFoundError(
-        "`ray.data` is missing. Make sure you installed Ray with the *data* extra:\n"
-        "    pip install \"ray[data]\"\n"
-        "(The full command `pip install \"ray[default,air,data]\"` is safest.)"
+        "`ray.data` is missing. Make sure you installed Ray with the *data* extra (ray[data])."
     ) from exc
 
-from python.data.schema import LineRow, ResultRow
-
 # -----------------------------------------------------------------------------
-# Fake data generators – **placeholder** implementation until real API wired.
+# Real‐data orchestration layer
 # -----------------------------------------------------------------------------
 
-def _fake_lines(n: int, game_day: date) -> List[dict]:
-    """Generate *n* fake line snapshots for a single day."""
+# We delegate league-specific scraping to the dedicated fetchers that already
+# live in this package.  `nightly_fetch.py` becomes a thin coordinator that
+# calls them with a *date-scoped* output directory so historical partitions sit
+# under `data/raw/<YYYY-MM-DD>/<league>/...`.
 
-    rows = []
-    for i in range(n):
-        game_id = int(game_day.strftime("%Y%m%d")) * 100 + i // 2
-        rows.append(
-            LineRow(
-                game_id=game_id,
-                team=["LAL", "NYK"][i % 2],
-                line_type="spread",
-                value=-3.5 if i % 2 == 0 else 3.5,
-                odds=-110,
-                timestamp=datetime.utcnow(),
-            ).dict()
-        )
-    return rows
+from python.data import (
+    fetch_wnba_stats,
+    fetch_nba_stats,
+    fetch_ncaaw_stats,
+)
 
-
-def _fake_results(num_games: int, game_day: date) -> List[dict]:
-    """Generate fake final results for *num_games* games."""
-
-    rows: List[dict] = []
-    for i in range(num_games):
-        game_id = int(game_day.strftime("%Y%m%d")) * 100 + i
-        rows.extend(
-            [
-                ResultRow(
-                    game_id=game_id,
-                    team="LAL",
-                    points=102 + i,
-                    won=True,
-                    timestamp=datetime.utcnow(),
-                ).dict(),
-                ResultRow(
-                    game_id=game_id,
-                    team="NYK",
-                    points=97 + i,
-                    won=False,
-                    timestamp=datetime.utcnow(),
-                ).dict(),
-            ]
-        )
-    return rows
+# Mapping of league → (module, default seasons resolver)
+_LEAGUES: dict[str, tuple[object, Callable[[date], List[str]]]] = {
+    "wnba": (
+        fetch_wnba_stats,
+        lambda d: [str(d.year)],  # WNBA season == calendar year since summer season
+    ),
+    "nba": (
+        fetch_nba_stats,
+        lambda d: [f"{d.year-1}-{str(d.year)[-2:]}"] if d.month >= 8 else [
+            f"{d.year-2}-{str(d.year-1)[-2:]}"
+        ],  # e.g. 2025-06 → 2024-25 season
+    ),
+    "ncaaw": (
+        fetch_ncaaw_stats,
+        lambda d: [str(d.year - 1) if d.month < 7 else str(d.year)],  # academic year
+    ),
+}
 
 # -----------------------------------------------------------------------------
 # Main entrypoint
@@ -107,22 +87,36 @@ def main() -> None:  # noqa: D401
 
     parser = argparse.ArgumentParser(description="Nightly data fetch job")
     parser.add_argument("--date", type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(), default=date.today())
-    parser.add_argument("--rows", type=int, default=1000, help="Number of line snapshots to generate")
     parser.add_argument("--output-dir", type=Path, default=Path("data/raw"), help="Root output directory")
     args = parser.parse_args()
 
     ray.init(address="auto", ignore_reinit_error=True)
 
-    # Build datasets.
-    ds_lines: Dataset = ray.data.from_items(_fake_lines(args.rows, args.date))
-    ds_results: Dataset = ray.data.from_items(_fake_results(args.rows // 2, args.date))
+    # Iterate over each league and fire its scraper.
+    for league, (mod, season_fn) in _LEAGUES.items():
+        seasons = season_fn(args.date)
 
-    # Write Parquet partitions.
-    ds_dir = args.output_dir / args.date.isoformat()
-    ds_lines.write_parquet(str(ds_dir / "lines"), mode="overwrite")
-    ds_results.write_parquet(str(ds_dir / "results"), mode="overwrite")
+        # Normalise to list of ints/strings accepted by each module.
+        if not isinstance(seasons, list):
+            seasons = [seasons]
 
-    print(f"✅ Wrote datasets to {ds_dir.resolve()}")
+        out_dir = (args.output_dir / args.date.isoformat() / league).resolve()
+        print(f"\n🏀 [{league.upper()}] → seasons {seasons} → {out_dir}")
+
+        # Each fetcher exposes a CLI-style main(argv) – we emulate that so we
+        # don't spawn new Python processes.
+        argv = ["--seasons", *seasons]
+        argv += ["--out_dir", str(out_dir)]
+        argv += ["--threads", "8"]
+
+        try:
+            mod.main(argv)  # type: ignore[attr-defined]
+        except SystemExit:
+            # The downstream scripts call argparse which raises SystemExit; we
+            # swallow it so the loop continues.
+            pass
+
+    print(f"✅ Completed nightly fetch for {args.date.isoformat()}")
 
 
 if __name__ == "__main__":

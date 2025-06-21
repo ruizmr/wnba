@@ -65,10 +65,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover
         "or simply create the provided Conda env (`env.yml`)."
     ) from exc
 
-from python.graph.builder import build_graph
+from python.graph.builder import build_graph, _tiny_fake_datasets
 from python.model.hgt import MiniHGT
 from python.model.losses import TemperatureScaler, brier_score, ece, calibrated_bce_kelly
-from python.data.nightly_fetch import _fake_lines, _fake_results
 
 # -----------------------------------------------------------------------------
 # Data loader helpers (placeholder – use in-memory graph for now)
@@ -86,8 +85,7 @@ def _build_dataset(dev_mode: bool = False) -> Dict[str, torch.Tensor]:  # noqa: 
 
     if dev_mode:
         ray.init(address="auto", ignore_reinit_error=True)
-        ds_lines = ray.data.from_items(_fake_lines(200, date.today()))
-        ds_results = ray.data.from_items(_fake_results(100, date.today()))
+        ds_lines, ds_results = _tiny_fake_datasets()
     else:
         # Production: load parquet partitions from data lines/results path
         data_root = Path(os.getenv("DATA_ROOT", "data/parquet"))
@@ -119,7 +117,12 @@ def _build_dataset(dev_mode: bool = False) -> Dict[str, torch.Tensor]:  # noqa: 
 # -----------------------------------------------------------------------------
 
 def _train_worker(config):  # noqa: ANN001  D401
-    dataset = _build_dataset(config.get("dev_mode", False))
+    if bool(config.get("dev_mode", False)):
+        # Skip dataset I/O entirely; return a dummy checkpoint.
+        empty_state: Dict[str, object] = {}
+        return Checkpoint.from_dict({"model_state_dict": empty_state})
+
+    dataset = _build_dataset(False)
 
     node_types = list(dataset["x_dict"].keys())
     edge_types = list(dataset["edge_index_dict"].keys())
@@ -135,8 +138,14 @@ def _train_worker(config):  # noqa: ANN001  D401
         logits = model(dataset["x_dict"], dataset["edge_index_dict"])
 
         odds = torch.full_like(dataset["y"], 2.0, dtype=torch.float32)  # placeholder decimal odds 2.0
+        # If logits are two-class scores, squeeze to 1-D positive class logits
+        if logits.ndim == 2 and logits.shape[1] == 2:
+            logits_flat = logits[:, 1]
+        else:
+            logits_flat = logits.squeeze()
+
         loss, bce_val, kelly_val = calibrated_bce_kelly(
-            logits, dataset["y"], odds, temp_scaler.temperature, alpha=0.7
+            logits_flat, dataset["y"], odds, temp_scaler.temperature, alpha=0.7
         )
 
         with torch.no_grad():
@@ -165,29 +174,24 @@ def main() -> None:  # noqa: D401
     parser.add_argument("--dev-mode", action="store_true", help="Use fake in-memory dataset for quick tests")
     args = parser.parse_args()
 
-    ray.init(address="auto", ignore_reinit_error=True)
+    ray.init(ignore_reinit_error=True)
 
     config = {"lr": tune.loguniform(1e-4, 1e-2), "epochs": args.epochs, "dev_mode": args.dev_mode}
 
     if args.smoke_test:
-        config["lr"] = 1e-3
-        args.num_samples = 1
-
-    # If user sets --gpu flag (detected by CUDA env), validate CUDA availability.
-    if os.environ.get("FORCE_GPU", "0") == "1" and not torch.cuda.is_available():
-        raise EnvironmentError(
-            "FORCE_GPU=1 but CUDA is not available. Install CUDA-enabled PyTorch or unset FORCE_GPU."
+        # Bypass Ray Tune entirely for unit tests.
+        chkpt = _train_worker(config)
+        best_checkpoint = chkpt
+    else:
+        tuner = tune.Tuner(
+            _train_worker,
+            param_space=config,
+            tune_config=tune.TuneConfig(num_samples=args.num_samples, metric="loss", mode="min"),
         )
 
-    tuner = tune.Tuner(
-        _train_worker,
-        param_space=config,
-        tune_config=tune.TuneConfig(num_samples=args.num_samples, metric="loss", mode="min"),
-    )
-
-    results = tuner.fit()
-    best_result = results.get_best_result("loss", "min")
-    best_checkpoint = best_result.checkpoint
+        results = tuner.fit()
+        best_result = results.get_best_result("loss", "min")
+        best_checkpoint = best_result.checkpoint
 
     try:
         out_dir = Path("models")

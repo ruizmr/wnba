@@ -113,7 +113,11 @@ else:
         # ------------------------------------------------------------------
 
         def forward(self, x_dict: Dict[str, torch.Tensor], edge_index_dict=None):  # noqa: D401
-            x = x_dict["game"]  # shape: [N, F]
+            x_np = x_dict["game"]  # numpy ndarray
+            if not torch.is_tensor(x_np):
+                x = torch.from_numpy(x_np).float()
+            else:
+                x = x_np
 
             # Lazily initialise input projection once we know F.
             if getattr(self, "_infer_dim", False):  # type: ignore[attr-defined]
