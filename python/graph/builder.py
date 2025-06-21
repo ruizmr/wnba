@@ -14,7 +14,7 @@ remote task *or* locally for unit tests.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Tuple, Any
+from typing import TYPE_CHECKING, Tuple, Any, cast
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -25,8 +25,11 @@ if TYPE_CHECKING:  # pragma: no cover – avoid runtime dependency
     from torch_geometric.data import HeteroData  # type: ignore
     from ray.data import Dataset  # type: ignore
 else:
+    # At runtime we may not have the heavyweight deps installed.  Use `Any`
+    # placeholders so normal execution continues while static checkers still
+    # see concrete types via the TYPE_CHECKING branch above.
     HeteroData = Any  # type: ignore[assignment]
-    Dataset = Any      # type: ignore[assignment]
+    Dataset = Any  # type: ignore[assignment]
 
 # If torch_geometric is missing at *runtime* we fall back to a stub defined
 # below.  This logic must remain AFTER the TYPE_CHECKING block so mypy sees the
@@ -34,7 +37,7 @@ else:
 
 try:
     from torch_geometric.data import HeteroData as _RuntimeHetero  # type: ignore
-    HeteroData = _RuntimeHetero  # type: ignore[assignment]
+    HeteroData = cast("type[object]", _RuntimeHetero)  # type: ignore[assignment]
 except ModuleNotFoundError as exc:  # pragma: no cover
     # ------------------------------------------------------------------
     # Graceful fallback 🚑
@@ -69,7 +72,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
         def __init__(self):
             self.edge_index: _NDArray | None = None
 
-    class _HeteroData(dict):  # type: ignore
+    class _HeteroData(dict[Any, Any]):  # type: ignore
         """Extremely light clone of `torch_geometric.data.HeteroData`."""
 
         def __getitem__(self, key):
@@ -114,7 +117,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
     # Finally, expose the stub in the local namespace so the rest of this file
     # works transparently.
-    HeteroData = _HeteroData  # type: ignore[assignment]
+    HeteroData = cast("type[object]", _HeteroData)  # type: ignore[assignment]
 
 try:
     import numpy as np  # type: ignore
