@@ -14,7 +14,7 @@ remote task *or* locally for unit tests.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Tuple, Any, cast, Dict, List
+from typing import TYPE_CHECKING, Tuple, Any, cast, Dict, List, Protocol, overload, TypeVar, TypeAlias
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -23,13 +23,14 @@ from pathlib import Path
 
 if TYPE_CHECKING:  # pragma: no cover – avoid runtime dependency
     from torch_geometric.data import HeteroData  # type: ignore[import-not-found]
-    from ray.data import Dataset
+    from ray.data import Dataset as _RayDataset  # type: ignore[import-not-found, unused-ignore]
+    Dataset: TypeAlias = _RayDataset
 else:
     # At runtime we may not have the heavyweight deps installed.  Use `Any`
     # placeholders so normal execution continues while static checkers still
     # see concrete types via the TYPE_CHECKING branch above.
     HeteroData = Any
-    Dataset = Any
+    Dataset: TypeAlias = Any
 
 # If torch_geometric is missing at *runtime* we fall back to a stub defined
 # below.  This logic must remain AFTER the TYPE_CHECKING block so mypy sees the
@@ -72,8 +73,26 @@ except ModuleNotFoundError as exc:  # pragma: no cover
         def __init__(self) -> None:
             self.edge_index: _NDArray | None = None
 
+    KNode = TypeVar("KNode", bound=str)
+    KEdge = TypeVar("KEdge", bound=Tuple[str, str, str])
+
+    class _NodeProtocol(Protocol):
+        x: _NDArray | None
+        y: _NDArray | None
+
+    class _EdgeProtocol(Protocol):
+        edge_index: _NDArray | None
+
     class _HeteroData(dict[Any, Any]):
         """Extremely light clone of `torch_geometric.data.HeteroData`."""
+
+        # Precise overloads so mypy understands the return type depending on key.
+
+        @overload
+        def __getitem__(self, key: str) -> _Node: ...  # noqa: D401
+
+        @overload
+        def __getitem__(self, key: Tuple[str, str, str]) -> _Edge: ...  # noqa: D401
 
         def __getitem__(self, key: Any) -> Any:
             """Get or auto-create a node/edge container."""
