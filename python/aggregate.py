@@ -19,7 +19,7 @@ has not changed.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Sequence, Union, TYPE_CHECKING, TypeVar, overload
+from typing import Iterable, Sequence, TYPE_CHECKING, TypeVar, overload
 
 import hashlib
 import json
@@ -51,7 +51,7 @@ def geo_mean(values: Sequence[T]) -> float: ...  # pragma: no cover
 def geo_mean(values: Sequence[Sequence[T]]) -> list[float]: ...  # pragma: no cover
 
 
-def geo_mean(values: Sequence[Union[float, Sequence[float]]]) -> float | list[float]:
+def geo_mean(values: Sequence[T] | Sequence[Sequence[T]]) -> float | list[float]:
     """Geometric mean helper with ergonomic behaviour for *both* scalar and
     vector use-cases.
 
@@ -71,10 +71,13 @@ def geo_mean(values: Sequence[Union[float, Sequence[float]]]) -> float | list[fl
 
     # Case 1 ‑ flat list of floats
     if isinstance(first, (int, float)):
-        prod = 1.0
-        for v in values_list:  # type: ignore[arg-type]
-            prod *= float(v)  # explicit cast silences ConvertibleToFloat
-        return prod ** (1.0 / len(values_list))
+        from typing import cast
+
+        scalar_vals = cast(Sequence[float], values_list)
+        prod: float = 1.0
+        for v in scalar_vals:
+            prod *= float(v)
+        return prod ** (1.0 / float(len(scalar_vals)))
 
     # Case 2 ‑ list of iterables → ensemble element-wise geometric mean.
     vectors: list[list[float]] = [list(map(float, vec)) for vec in values_list]  # type: ignore[arg-type]
