@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import List, Sequence
 
 import ray
+import time
 
 from python.data.wehoop_ingest import load_wehoop
 from python.graph.builder import build_graph
@@ -54,7 +55,30 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
     seasons = _parse_seasons(args.seasons)
     logger.info("Loading WEHOOP seasons=%s", seasons or "ALL")
 
+    ingest_start = time.time()
     ds_lines, ds_results = load_wehoop(seasons=seasons)
+    ingest_elapsed = time.time() - ingest_start
+    total_rows = ds_lines.count() + ds_results.count()
+    rows_per_sec = total_rows / ingest_elapsed if ingest_elapsed else 0
+
+    logger.info("Ingest throughput: %.1f rows/s (Grafana metric)", rows_per_sec)
+
+    # ------------------------------------------------------------------
+    # Train/Val deterministic split (Season % 5 == 0)
+    # ------------------------------------------------------------------
+    train_lines = ds_lines.filter(lambda r: r["season"] % 5 != 0)
+    val_lines = ds_lines.filter(lambda r: r["season"] % 5 == 0)
+
+    train_results = ds_results.filter(lambda r: r["season"] % 5 != 0)
+    val_results = ds_results.filter(lambda r: r["season"] % 5 == 0)
+
+    logger.info(
+        "Split rows – train_lines=%d val_lines=%d train_results=%d val_results=%d",
+        train_lines.count(),
+        val_lines.count(),
+        train_results.count(),
+        val_results.count(),
+    )
 
     if args.exclude_preseason:
         logger.info("Excluding preseason games (season_type!=2)…")
@@ -77,7 +101,6 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
         return
 
     logger.info("Starting dummy training loop…")
-    import time
 
     for epoch in range(args.epochs):
         logger.info("Epoch %d/%d …", epoch + 1, args.epochs)
