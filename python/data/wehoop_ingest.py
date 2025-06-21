@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
+import shutil
+
 try:
     import ray
 except ImportError as exc:  # pragma: no cover – ray may be optional in CI
@@ -119,6 +121,54 @@ def _project_results(batch: pd.DataFrame) -> pd.DataFrame:  # type: ignore[name-
     return df
 
 
+# ---------------------------------------------------------------------------
+# Optional caching (15 GB threshold)
+# ---------------------------------------------------------------------------
+
+_CACHE_THRESHOLD_BYTES = 15 * 1024 ** 3  # 15 GB
+_CACHE_ROOT = (
+    Path(os.getenv("DATA_CACHE", "/tmp/data_cache")) / "wehoop"
+)
+
+
+def _maybe_cache(paths: List[str]) -> List[str]:
+    """Stage parquet files to a local cache directory if data volume is large.
+
+    Logic: If the combined size of *paths* exceeds the 15 GB threshold, copy
+    the files into `$DATA_CACHE/wehoop/…` (maintaining the same relative
+    folder structure).  On subsequent runs, the already-cached files will be
+    used directly, avoiding heavy re-reads from remote/network filesystems.
+    """
+
+    total_size = 0
+    try:
+        total_size = sum(Path(p).stat().st_size for p in paths)
+    except FileNotFoundError:
+        # If any file is missing just bail – discovery layer will raise later.
+        return paths
+
+    if total_size <= _CACHE_THRESHOLD_BYTES:
+        return paths  # not big enough – skip caching
+
+    _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+
+    cached: list[str] = []
+    for p in paths:
+        src = Path(p)
+        try:
+            rel = src.relative_to(WEHOOP_ROOT)
+        except ValueError:
+            rel = src.name  # fallback – put flat in cache
+        dest = _CACHE_ROOT / rel
+        if not dest.exists() or dest.stat().st_size != src.stat().st_size:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            logger.info("Caching WEHOOP parquet -> %s", dest)
+            shutil.copy2(src, dest)
+        cached.append(str(dest))
+
+    return cached
+
+
 # ----------------------------------------------------------------------------
 # Public API
 # ----------------------------------------------------------------------------
@@ -145,6 +195,10 @@ def load_wehoop(seasons: list[int] | None = None) -> Tuple["ray.data.Dataset", "
     results_paths = _discover_parquet_files(
         WEHOOP_ROOT, _TEAM_BOX_PATH, _TEAM_BOX_PATTERN, seasons
     )
+
+    # Optionally stage to cache if dataset is large
+    lines_paths = _maybe_cache(lines_paths)
+    results_paths = _maybe_cache(results_paths)
 
     # ---------------------------------------------------------------------
     # Read via Ray
