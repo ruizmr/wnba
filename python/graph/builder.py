@@ -14,7 +14,7 @@ remote task *or* locally for unit tests.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Tuple, Any, cast
+from typing import TYPE_CHECKING, Tuple, Any, cast, Dict, List
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -86,19 +86,23 @@ except ModuleNotFoundError as exc:  # pragma: no cover
         # Compatibility helpers used elsewhere in the codebase/tests.
         # ------------------------------------------------------------------
 
-        def metadata(self):  # noqa: D401
-            node_types = [k for k in self.keys() if isinstance(k, str)]
-            edge_types = [k for k in self.keys() if isinstance(k, tuple)]
+        def metadata(self) -> Tuple[List[str], List[Tuple[str, str, str]]]:  # noqa: D401
+            """Return lists of node- and edge-type keys (PyG compatibility)."""
+            node_types = [cast(str, k) for k in self.keys() if isinstance(k, str)]
+            edge_types = [cast(Tuple[str, str, str], k) for k in self.keys() if isinstance(k, tuple)]
             return node_types, edge_types
 
         @property
-        def x_dict(self):  # noqa: D401
-            return {k: v.x for k, v in self.items() if isinstance(k, str)}
+        def x_dict(self) -> Dict[str, _NDArray | None]:  # noqa: D401
+            """Mapping of node-type → feature matrix."""
+            return {cast(str, k): cast(_Node, v).x for k, v in self.items() if isinstance(k, str)}
 
         @property
-        def edge_index_dict(self):  # noqa: D401
+        def edge_index_dict(self) -> Dict[Tuple[str, str, str], _NDArray | None]:  # noqa: D401
+            """Mapping of edge-type → index array."""
             return {
-                k: v.edge_index for k, v in self.items() if isinstance(k, tuple)
+                cast(Tuple[str, str, str], k): cast(_Edge, v).edge_index
+                for k, v in self.items() if isinstance(k, tuple)
             }
 
     # Inject into a fake `torch_geometric.data` module so that *importers*
